@@ -5,20 +5,19 @@
  *             https://en.wikipedia.org/wiki/Descartes%27_theorem
  **/
 
-/* NOTE to avoid functions with huge number parameters I decided to pack all important
+/* NOTE to avoid functions with huge number of parameters I decided to pack all important
  * circle information into a dictionary, this could be improved by having an external file
  * which would be included here and used, as you can use structs in those.
  * */
  
  /* NOTE this code assumes that you are feeding it three tangent circles*/
 
+#include <complex.h>
+
 /* Gets the bend/curvature of the circle from its radius. 
  * @float r: radius of the circle
  * @returns -> float: curvature of the circle
  * */
-
-#include <complex.h>
-
 function float get_bend(float r) {
     return 1.0 / r;
 }

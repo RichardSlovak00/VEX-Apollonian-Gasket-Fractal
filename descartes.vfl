@@ -1,0 +1,231 @@
+/* context: Attribute Wrangle (run over detail (once))*/
+
+
+/* references: https://en.wikipedia.org/wiki/Apollonian_gasket
+ *             https://en.wikipedia.org/wiki/Descartes%27_theorem
+ **/
+
+/* NOTE to avoid functions with huge number parameters I decided to pack all important
+ * circle information into a dictionary, this could be improved by having an external file
+ * which would be included here and used, as you can use structs in those.
+ * */
+ 
+ /* NOTE this code assumes that you are feeding it three tangent circles*/
+
+/* Gets the bend/curvature of the circle from its radius. 
+ * @float r: radius of the circle
+ * @returns -> float: curvature of the circle
+ * */
+
+#include <complex.h>
+
+function float get_bend(float r) {
+    return 1.0 / r;
+}
+
+/* Solves the equation according to the descartes theorem.
+ * @float k1: first radius
+ * @float k2: second radius
+ * @float k3: third radius
+ * @returns -> float[]: array of solutions
+ * */
+function float[] descartes_theorem(float k1; float k2; float k3) {
+    float sum = k1 + k2 + k3;
+    float root = 2.0 * sqrt(abs((k1 * k2) + (k2 * k3) + (k3 * k1)));
+    return array(sum + root, sum - root);
+}
+
+/* Takes the square root of a complex number.
+ * @complex z: the complex number to take the square root of
+ * @returns -> complex: the square root of a complex number
+ * */
+function complex csqrt(complex z) {
+    // VEX does not support recursion so we need to do this
+    
+    float m = sqrt((z.real * z.real) + (z.imag * z.imag));
+    float angle = atan2(z.imag, z.real);
+    m = sqrt(m);
+    angle = angle / 2.0;
+    return CMPLX(m * cos(angle), m * sin(angle));
+}
+
+/* Converts a complex number to a vector.
+ * @complex z: complex number to convert
+ * @returns -> vector: converted complex number
+ * */
+function vector CMPLX_to_vec(complex z) {
+    return set(z.real, z.imag, 0);
+}
+
+/* Converts a vector to a complex number.
+ * @vector v1: vector to convert
+ * @returns -> complex: converted vector
+ * */
+function complex vec_to_CMPLX(vector v1) {
+    return CMPLX(v1.x, v1.y);
+}
+
+/* Finds the center point of the 4th tangent circle based on the first three.
+ * @complex c1: first circle position, interpreted as a complex number
+ * @float k1: first circle radius
+ * @complex c2: second circle position, interpreted as a complex number
+ * @float k2: second circle radius
+ * @complex c3: third circle position, interpreted as a complex number
+ * @float k3: third circle radius
+ * @returns -> vector[]: center point of the 4th tangent circle
+ * */
+function vector[] complex_descartes_centers(
+    complex c1; float k1;
+    complex c2; float k2;
+    complex c3; float k3;
+    float k4
+) {
+    complex z1 = cmultreal(c1, k1);
+    complex z2 = cmultreal(c2, k2);
+    complex z3 = cmultreal(c3, k3);
+    complex sum = cadd(cadd(z1, z2), z3);
+    complex root = csqrt(cadd(cadd(cmult(z1, z2), cmult(z2, z3)), cmult(z1, z3)));
+    root = cmultreal(root, 2.0);
+    complex center1 = cmultreal(cadd(sum, root), 1.0 / k4);
+    complex center2 = cmultreal(csub(sum, root), 1.0 / k4);
+    return array(CMPLX_to_vec(center1), CMPLX_to_vec(center2));
+}
+
+/* If at least one of the vector has the distance in tolerance we return true, else false.
+ * @vector v[]: array of vectors to compare against
+ * @vector target: to calculate the distance of from the vector from the array 
+ * float tol: tolerance value
+ * @returns -> int: 1 = true, 0 = false
+ * */
+function int findp(vector v[];vector target;float tol){
+    foreach(vector v1; v){
+        if (distance(v1,target) < tol)
+            return 1;
+    }
+    return 0;
+}
+
+/* If the two circle are tangent according to some tolerance return true, else return false
+ * @dict circle: first circle information
+ * @dict circle2: second circle information
+ * @float tol: tolerance to test against 
+ * @returns -> int: 1 = true, 0 = false
+ * */
+function int tangentp(dict circle; dict circle2;float tol){
+    vector center = circle["center"];
+    vector center2 = circle2["center"];
+    float curvature = circle["curvature"];
+    float curvature2 = circle2["curvature"];
+    float radius = 1.0/abs(curvature);
+    float radius2 = 1.0/abs(curvature2);
+    float d = distance(center,center2);
+    int a =abs( d - (radius + radius2)) < tol;
+    int b = abs(d - abs(radius2 - radius)) < tol;
+    return a || b;
+}
+
+
+/* Validates circle4 based on if its tangent to the rest, according to some tolerance
+ * @dict circle0: first circle information
+ * @dict circle2: second circle information
+ * @dict circle3: third circle information
+ * @dict circle4: fourth circle information
+ * @float: tolerance to test against
+ * returns -> int: 1 = true, 0 = false
+ * */
+function int validate(dict circle0;dict circle2;dict circle3;dict circle4;float tol){
+    
+    if(!tangentp(circle4,circle0,tol)){return 0;}
+    if(!tangentp(circle4,circle2,tol)){return 0;}
+    if(!tangentp(circle4,circle3,tol)){return 0;}
+    return 1;
+};
+
+//recursion depth
+int recursion_depth = chi("recursion_depth");
+
+
+//center and curvature extraction from the first three circles
+vector base_center = point(1,"P",0);
+vector base_center2 = point(1,"P",1);
+vector base_center3 = point(1,"P",2);
+
+float base_curvature = point(1,"curvature",0);
+float base_curvature2 = point(1,"curvature",1);
+float base_curvature3 = point(1,"curvature",2);
+
+//first three tangent circles
+dict base_circle = set("center",base_center,"curvature",base_curvature);
+dict base_circle2 = set("center",base_center2,"curvature",base_curvature2);
+dict base_circle3 = set("center",base_center3, "curvature",base_curvature3);
+dict base_triplet = set("circle",base_circle,"circle2",base_circle2,"circle3",base_circle3);
+
+/* We use a nested queues approach to avoid recursion (feedback loops) */
+dict queue[];
+
+/* weird using push for a queue but whatever */
+push(queue,base_triplet);
+
+/* this whole thing could be a function returning a huge array of the circles and stuff but should be fine like this
+ * it does get rid of the possibility of having this whole thing work with just including the .vfl file sadly 
+ * */
+d[]@queue = queue;
+float radii[];
+float radius_minimum = chf("radius_minimum");
+for(int i = 0; i < recursion_depth; i++){
+    dict new_queue[];
+    for(int j = 0; j < len(queue); j++){
+        dict triplet = pop(queue,0);
+        
+        //getting tangent circles of the triplet to find the 4th
+        dict circle = triplet["circle"];
+        dict circle2 = triplet["circle2"];
+        dict circle3 = triplet["circle3"];
+        
+        vector center = circle["center"];
+        vector center2 = circle2["center"];
+        vector center3 = circle3["center"];
+        
+        complex cCenter = vec_to_CMPLX(center);
+        complex cCenter2 = vec_to_CMPLX(center2);
+        complex cCenter3 = vec_to_CMPLX(center3);
+        
+        float curvature = circle["curvature"];
+        float curvature2 = circle2["curvature"];
+        float curvature3 = circle3["curvature"];
+        
+        radii = array(1/abs(curvature),1/abs(curvature2),1/abs(curvature3));
+        
+        float curvature4_options[] = descartes_theorem(curvature,curvature2,curvature3);
+        float curvature4 = curvature4_options[0];
+        float radius4 = 1.0/abs(curvature4);
+        
+        
+        vector center4_options[] = complex_descartes_centers(cCenter,curvature,cCenter2,curvature2,cCenter3,curvature3,curvature4);
+        /* get out if the radius is too small 
+         * this guards us against generating way too many points (user has control over it)*/
+        if(radius4 < radius_minimum){continue;}
+        foreach(vector center4;center4_options){
+                dict circle4 = set("center",center4,"curvature",curvature4);
+                
+                if(validate(circle,circle2,circle3,circle4,.001)){
+                // creating circle4, creating the point to later copy onto, 
+                // creating triplets for each point = 6 triplets; 1 point - 3 triplets
+                int newPt = addpoint(0,center4);
+                setpointattrib(0,"pscale",newPt,radius4);
+                
+                d@circle4=circle4;
+                
+                dict triplet1 = set("circle",circle2,"circle2",circle3,"circle3",circle4);
+                dict triplet2 = set("circle",circle,"circle2",circle3,"circle3",circle4);
+                dict triplet3 = set("circle",circle,"circle2",circle2,"circle3",circle4);
+                
+                append(new_queue,triplet1);
+                append(new_queue,triplet2);
+                append(new_queue,triplet3);
+            }
+        }
+    }
+    append(f[]@radii,radii);
+    append(queue,new_queue); 
+}
